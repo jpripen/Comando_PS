@@ -11,8 +11,8 @@ print('data presentation'.upper())
 print('-' * 20)
 
 # Importing files
-df_train = pd.read_csv('train.csv')
-df_test = pd.read_csv('test.csv')
+df_train = pd.read_csv('Titanic/data/train.csv')
+df_test = pd.read_csv('Titanic/data/test.csv')
 
 print(f'DATASET SIZES\nTrain set: {df_train.shape}\nTest set: {df_test.shape}\n')
 
@@ -166,7 +166,7 @@ for ind, row in df_full[df_full['FarePerPerson'].isnull()].iterrows():
 # any correlation between Embarked and other features such as FarePerPerson, Title or Pclass
 
 # What is the proportion of passengers of each class that have embarked at each port?
-df_ports = df_full[:891].groupby(['Embarked', 'Pclass'])['Pclass'].count() 
+df_ports = df_full[:891].groupby(['Embarked', 'Pclass'])['Pclass'].count()
 
 print('number of passengers for each port/class'.upper())
 print(df_ports)
@@ -201,6 +201,8 @@ print('\n')
 columns = ['AgeBand', 'Pclass', 'Title', 'Embarked']
 df_full = pd.get_dummies(df_full, columns = columns)
 
+df_full['Sex'] = df_full['Sex'].map({'male':1,'female':0})
+
 # Generate the correlation matrix for the train set
 #corr_full = df_full.corr()
 
@@ -210,7 +212,7 @@ df_full = pd.get_dummies(df_full, columns = columns)
 #plt.show()
 
 # Exporting df_full for modelling
-df_full.to_csv('titanic_features.csv')
+# df_full.to_csv('titanic_features.csv')
 
 # THIS CODE WAS USED TO GENERATE AgeBands.png
 # Plot the decission boundaries
