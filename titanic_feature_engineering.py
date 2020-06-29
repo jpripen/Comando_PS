@@ -242,3 +242,174 @@ df_full['Sex'] = df_full['Sex'].map({'male':1,'female':0})
 #plt.title("Age clusters and decision boundaries")
 #plt.savefig('AgeBands.png', dpi = 100)
 #plt.show()
+
+##########
+# MODELING
+##########
+
+# First of all, we select relevant features
+data = df_full.drop(['Survived', 'Name', 'Age', 'SibSp', 'Parch', 'Ticket', 'Fare', 'Cabin', 'FamilySize', 
+					 'TicketOccurr', 'FarePerPerson'], axis = 1)
+
+print(data.columns)
+print(data.head())
+
+# Now, we can split the data
+train = data[0:891]        # "original" train set containing transformed/selected features
+test = data[891:]          # "original" test set containing transformed/selected features 
+target = df_train.Survived # being df_train the original train data we imported in the beginning 
+
+print(f'''Checking data frame sizes...\ntrain has {train.shape} entries\ntest has {test.shape} entries 
+target has { target.shape} entries\n''')
+
+# We should now preprocess our data before using any algorithm
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+
+X = StandardScaler().fit_transform(train)
+y = target
+
+# Data splitting
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 4)
+
+print(f'''Checking train and test split sizes...
+Train set: X_train -> {X_train.shape}, y_train -> {y_train.shape}
+Test set: X_test -> {X_test.shape}, y_test -> {y_test.shape}\n''')
+
+# Model selection
+from sklearn.linear_model import LogisticRegression, Perceptron, SGDClassifier
+from sklearn.svm import SVC
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier, ExtraTreesClassifier
+
+from sklearn.model_selection import cross_val_score
+
+# Set random state and number of estimators for tree based models
+random_state = 4
+n_estimators = 100
+
+models = [LogisticRegression(
+             random_state = random_state),
+          Perceptron(
+              random_state = random_state), 
+          SGDClassifier(
+              random_state = random_state), 
+          SVC(
+              random_state = random_state), 
+          KNeighborsClassifier(
+              ), 
+          GaussianNB(
+              ),
+          DecisionTreeClassifier(
+              random_state = random_state), 
+          RandomForestClassifier(
+              random_state = random_state,
+              n_estimators = n_estimators),
+          ExtraTreesClassifier(
+              random_state = random_state,
+              n_estimators = n_estimators),
+          AdaBoostClassifier(
+              random_state = random_state,
+              n_estimators = n_estimators),
+          GradientBoostingClassifier(
+              random_state = random_state, 
+              n_estimators = n_estimators)
+         ]
+
+# Lists to store the results
+model_name = []
+acc_test = []
+acc_train = []
+cv_scores = []
+
+# Number of folds for the cross validation
+cv = 5
+
+for model in models:
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+    model_name.append(model.__class__.__name__)
+    acc_test.append(model.score(X_test, y_test))
+    acc_train.append(model.score(X_train, y_train))
+    # We use X and y here because cross_val_score needs all the data to perform the splits by itself
+    cv_scores.append(cross_val_score(model, X, y, cv = cv))
+
+results = pd.DataFrame({
+    'Model': model_name,
+    'CVScore' : cv_scores,
+    'TestScore': acc_test,
+    'TrainScore': acc_train
+    })
+
+# We need to obtain the mean value for the CVScore column
+results.insert(1, 'CVMeanScore', np.mean(results['CVScore'].tolist(), axis = 1))
+results.drop(['CVScore'], axis = 1, inplace = True)
+
+print('Cross validation results'.upper())
+print(results)
+
+# Finally, we select the top 5 algorithms based on the CVMeanScore
+results_top5 = results.sort_values(by = 'CVMeanScore', ascending = False, ignore_index = True).head()
+
+print('\nTop 5 algorithms'.upper())
+print(results_top5)
+
+# Making predictions for Stacking
+# We have to split the original X and y matrices again: first and second refer to the base model and final outcome layer
+X_first, X_second, y_first, y_second = train_test_split(X, y, test_size = 0.5, random_state = 4)
+
+best_models = [GradientBoostingClassifier(
+              random_state = random_state, 
+              n_estimators = n_estimators),
+	          SVC(
+              random_state = random_state),
+              KNeighborsClassifier(
+              ),
+              DecisionTreeClassifier(
+              random_state = random_state),
+              ExtraTreesClassifier(
+              random_state = random_state,
+              n_estimators = n_estimators)]
+
+predictions = pd.DataFrame()
+
+for model in best_models:
+    model.fit(X, y)
+    predictions.insert(0, model.__class__.__name__, model.predict(X))
+
+predictions.insert(len(predictions.columns), 'Survived', y)
+
+print(predictions.sample(10))
+
+# We perform the second layer fitting
+import xgboost as xgb
+from sklearn.metrics import accuracy_score
+
+features = predictions.drop('Survived', axis = 1)
+outcome = predictions.Survived
+
+f_train, f_test, o_train, o_test = train_test_split(features, outcome, test_size = 0.2, random_state = random_state)
+
+
+xgb_model = xgb.XGBClassifier(random_state = random_state)
+xgb_model.fit(f_train, o_train)
+o_pred = xgb_model.predict(f_test)
+
+print(accuracy_score(o_test, o_pred))
+
+# Submission csv
+X_stack = StandardScaler().fit_transform(test)
+
+stack_preds = pd.DataFrame()
+
+for model in best_models:
+    stack_preds.insert(0, model.__class__.__name__, model.predict(X_stack))
+
+final_out = xgb_model.predict(stack_preds)
+
+submission = pd.DataFrame({'PassengerId': df_test['PassengerId'], 'Survived': final_out})
+print(submission)
+
+submission.to_csv("StackingSubmission.csv", index = False)
