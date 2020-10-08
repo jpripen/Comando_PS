@@ -1,2 +1,2 @@
 # Comando_PS
-Repositorio del comando PS para competiciones de Kaggle
+Repositorio del comando PS para competiciones de Kaggle.
